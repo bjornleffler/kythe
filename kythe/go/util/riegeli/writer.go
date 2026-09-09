@@ -338,11 +338,20 @@ func (h *chunkHeader) Marshal(buf []byte) {
 }
 
 // WriteTo writes the chunk to w, given its starting position within w.
+//
+// The receiver is left unmodified. Hashing into c.Header.DataHash instead
+// made this a write to shared state whenever the chunk was shared, and one
+// chunk is: fileSignatureChunk is a package-level value that every Writer
+// stamps at the head of its file. Two Writers running concurrently raced on
+// it, and so did verifySignature comparing against it. The hash is a pure
+// function of c.Data, so computing it into a copy of the header costs
+// nothing and leaves chunks immutable across a write.
 func (c *chunk) WriteTo(w *blockWriter, pos int) (int, error) {
-	binary.LittleEndian.PutUint64(c.Header.DataHash[:], hashBytes(c.Data))
+	h := c.Header
+	binary.LittleEndian.PutUint64(h.DataHash[:], hashBytes(c.Data))
 	// TODO(schroederc): reuse buffers
-	buf := make([]byte, chunkHeaderSize+len(c.Data)+paddingSize(pos, &c.Header))
-	c.Header.Marshal(buf[:chunkHeaderSize])
+	buf := make([]byte, chunkHeaderSize+len(c.Data)+paddingSize(pos, &h))
+	h.Marshal(buf[:chunkHeaderSize])
 	copy(buf[chunkHeaderSize:], c.Data)
 	return w.WriteChunk(buf)
 }
