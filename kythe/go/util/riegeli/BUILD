@@ -47,11 +47,18 @@ go_test(
 
 go_test(
     name = "golden_test",
-    srcs = ["golden_test.go"],
+    srcs = [
+        "golden_purego_gen_test.go",
+        "golden_test.go",
+    ],
     data = [
         "testdata/golden.entries.brotli.riegeli",
         "testdata/golden.entries.brotli_transpose.riegeli",
         "testdata/golden.entries.json",
+        "testdata/golden.entries.purego_brotli.riegeli",
+        "testdata/golden.entries.purego_brotli_transpose.riegeli",
+        "testdata/golden.entries.purego_zstd.riegeli",
+        "testdata/golden.entries.purego_zstd_transpose.riegeli",
         "testdata/golden.entries.snappy.riegeli",
         "testdata/golden.entries.uncompressed.riegeli",
         "testdata/golden.entries.uncompressed_transpose.riegeli",

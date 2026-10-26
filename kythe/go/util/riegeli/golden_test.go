@@ -48,6 +48,19 @@ var (
 		"snappy",
 		"zstd",
 	}
+
+	// Golden files written by this package's pure-Go codecs (cgo off), read
+	// back by every build. They show that a cgo build reads what a
+	// cross-compiled one wrote. Regenerate with
+	//   CGO_ENABLED=0 go test -run TestGeneratePureGoGolden -generate_purego_golden
+	// (golden_purego_gen_test.go). Keyed by file variant; the value is the
+	// RecordWriterOptions the writer records.
+	goldenPureGoVariants = map[string]string{
+		"purego_brotli":           "brotli",
+		"purego_brotli_transpose": "brotli,transpose",
+		"purego_zstd":             "zstd",
+		"purego_zstd_transpose":   "transpose,zstd",
+	}
 )
 
 func BenchmarkGoldenTestData(b *testing.B) {
@@ -95,6 +108,36 @@ func TestGoldenTestData(t *testing.T) {
 		opts := strings.Replace(variant, "_", ",", -1)
 		t.Run(variant, func(t *testing.T) { checkGoldenData(t, file, opts) })
 	}
+	for variant, opts := range goldenPureGoVariants {
+		file := goldenRiegeliFile(variant)
+		t.Run(variant, func(t *testing.T) { checkPureGoGoldenData(t, file, opts) })
+	}
+}
+
+// goldenRiegeliFile returns the path of the golden Riegeli file for variant.
+func goldenRiegeliFile(variant string) string {
+	return strings.Join([]string{goldenRiegeliFilePrefix, variant, "riegeli"}, ".")
+}
+
+// checkPureGoGoldenData ensures that a golden Riegeli file written by the
+// pure-Go codecs holds the goldenJSONFile records. The Go writer records
+// only RecordWriterOptions in its metadata, so that is all that is checked
+// of it.
+func checkPureGoGoldenData(t *testing.T, goldenRiegeliFile, expectedOptions string) {
+	riegeliFile, err := os.Open(goldenRiegeliFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer riegeliFile.Close()
+	riegeliReader := riegeli.NewReadSeeker(riegeliFile)
+
+	md, err := riegeliReader.RecordsMetadata()
+	if err != nil {
+		t.Fatalf("Error reading RecordsMetadata: %v", err)
+	} else if got := md.GetRecordWriterOptions(); got != expectedOptions {
+		t.Errorf("RecordWriterOptions = %q, want %q", got, expectedOptions)
+	}
+	checkGoldenRecords(t, riegeliReader)
 }
 
 // checkGoldenData ensures that the given Riegeli file contains the exact
@@ -103,18 +146,12 @@ func TestGoldenTestData(t *testing.T) {
 // options are the same format as the C++ strings options defined at:
 // https://github.com/google/riegeli/blob/master/doc/record_writer_options.md
 func checkGoldenData(t *testing.T, goldenRiegeliFile, expectedOptions string) {
-	jsonFile, err := os.Open(goldenJSONFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer jsonFile.Close()
 	riegeliFile, err := os.Open(goldenRiegeliFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer riegeliFile.Close()
 
-	jsonReader := &jsonReader{stream.ReadJSONEntries(jsonFile)}
 	riegeliReader := riegeli.NewReadSeeker(riegeliFile)
 
 	mdTextProto, err := ioutil.ReadFile(goldenMetadataFile)
@@ -133,6 +170,18 @@ func checkGoldenData(t *testing.T, goldenRiegeliFile, expectedOptions string) {
 	} else if diff := compare.ProtoDiff(md, &expectedMetadata); diff != "" {
 		t.Errorf("Bad RecordsMetadata: (-: found; +: expected)\n%s", diff)
 	}
+	checkGoldenRecords(t, riegeliReader)
+}
+
+// checkGoldenRecords ensures that riegeliReader holds exactly the
+// goldenJSONFile records, reading them in order and then seeking to each.
+func checkGoldenRecords(t *testing.T, riegeliReader riegeli.ReadSeeker) {
+	jsonFile, err := os.Open(goldenJSONFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer jsonFile.Close()
+	jsonReader := &jsonReader{stream.ReadJSONEntries(jsonFile)}
 
 	var records []*spb.Entry
 	var positions []riegeli.RecordPosition
