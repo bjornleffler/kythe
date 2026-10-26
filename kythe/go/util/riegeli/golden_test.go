@@ -17,6 +17,7 @@
 package riegeli_test
 
 import (
+	"bytes"
 	"encoding/hex"
 	"io"
 	"io/ioutil"
@@ -70,25 +71,29 @@ func BenchmarkGoldenTestData(b *testing.B) {
 	}
 }
 
-// benchGoldenData benchmarks the sequential reading of a Riegeli file.  MB/s is
-// measured by the size of each record read.
+// benchGoldenData benchmarks the sequential reading of a Riegeli file, the
+// whole file per iteration.  MB/s is measured by the size of the records read.
 func benchGoldenData(b *testing.B, goldenRiegeliFile string) {
-	f, err := os.Open(goldenRiegeliFile)
+	data, err := os.ReadFile(goldenRiegeliFile)
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer f.Close()
 
 	b.ReportAllocs()
-	rd := riegeli.NewReader(f)
-	for {
-		rec, err := rd.Next()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			b.Fatal(err)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var size int64
+		rd := riegeli.NewReader(bytes.NewReader(data))
+		for {
+			rec, err := rd.Next()
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				b.Fatal(err)
+			}
+			size += int64(len(rec))
 		}
-		b.SetBytes(int64(len(rec)))
+		b.SetBytes(size)
 	}
 }
 
