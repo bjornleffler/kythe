@@ -23,10 +23,13 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/DataDog/zstd"
 	"github.com/golang/snappy"
-	"github.com/google/brotli/go/cbrotli"
 )
+
+// The brotli and zstd codecs come from compression_cgo.go when cgo is
+// available, and from pure-Go packages in compression_purego.go when it is
+// not. Both read and write the standard formats, so either build reads what
+// the other wrote.
 
 func decompress(r byteReader, c compressionType) ([]byte, error) {
 	size, err := binary.ReadUvarint(r)
@@ -34,12 +37,11 @@ func decompress(r byteReader, c compressionType) ([]byte, error) {
 		return nil, fmt.Errorf("bad varint prefix for compressed block: %v", err)
 	}
 
-	var rd io.ReadCloser
 	switch c {
 	case brotliCompression:
-		rd = cbrotli.NewReader(r)
+		return decompressBrotli(r, size)
 	case zstdCompression:
-		rd = zstd.NewReader(r)
+		return decompressZstd(r, size)
 	case snappyCompression:
 		// TODO(schroederc): eliminate copy
 		all, err := ioutil.ReadAll(r)
@@ -50,7 +52,10 @@ func decompress(r byteReader, c compressionType) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("unsupported compression_type: '%s'", []byte{byte(c)})
 	}
+}
 
+// readDecoded reads exactly size decompressed bytes from rd, then closes it.
+func readDecoded(rd io.ReadCloser, size uint64) ([]byte, error) {
 	decoded := make([]byte, size)
 	if _, err := io.ReadFull(rd, decoded); err != nil {
 		rd.Close()
@@ -71,13 +76,12 @@ func newCompressor(opts *WriterOptions) (compressor, error) {
 	case noCompression:
 		return &nopCompressorClose{buf}, nil
 	case brotliCompression:
-		brotliOpts := cbrotli.WriterOptions{Quality: opts.compressionLevel()}
-		w := cbrotli.NewWriter(buf, brotliOpts)
+		w := newBrotliWriter(buf, opts.compressionLevel())
 		return &sizePrefixedWriterTo{buf: buf, WriteCloser: w}, nil
 	case zstdCompression:
 		lvl := opts.compressionLevel()
 		return &sizePrefixedWriterTo{buf: buf, WriteCloser: &batchCompressor{
-			Compress: func(src []byte) ([]byte, error) { return zstd.CompressLevel(nil, src, lvl) },
+			Compress: func(src []byte) ([]byte, error) { return compressZstd(src, lvl) },
 			Buffer:   buf,
 		}}, nil
 	case snappyCompression:

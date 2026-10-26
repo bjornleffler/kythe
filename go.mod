@@ -4,6 +4,7 @@ require (
 	bitbucket.org/creachadair/shell v0.0.7
 	bitbucket.org/creachadair/stringset v0.0.11
 	github.com/DataDog/zstd v1.5.5
+	github.com/andybalholm/brotli v1.1.0
 	github.com/apache/beam v2.31.0+incompatible
 	github.com/bazelbuild/bazel-gazelle v0.33.0
 	github.com/bazelbuild/rules_go v0.42.0
@@ -17,6 +18,7 @@ require (
 	github.com/google/subcommands v1.2.0
 	github.com/hanwen/go-fuse v1.0.0
 	github.com/jmhodges/levigo v1.0.0
+	github.com/klauspost/compress v1.18.0
 	github.com/minio/highwayhash v1.0.2
 	github.com/pkg/errors v0.9.1
 	github.com/sergi/go-diff v1.3.1
@@ -65,4 +67,4 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-go 1.21
+go 1.22

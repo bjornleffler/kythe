@@ -9,6 +9,8 @@ go_library(
     name = "riegeli",
     srcs = [
         "compression.go",
+        "compression_cgo.go",
+        "compression_purego.go",
         "reader.go",
         "riegeli.go",
         "transpose_decoder.go",
